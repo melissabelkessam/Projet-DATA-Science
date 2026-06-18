@@ -6,7 +6,7 @@ Système intelligent de maintenance prédictive basé sur des données de capteu
 
 **Problématique :** Prédire si une machine va tomber en panne dans les 24h (classification binaire)
 
-## 👥 Auteurs
+## Auteurs
 - Melissa BELKESSAM
 - Amelia BOUKRI
 
