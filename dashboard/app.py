@@ -207,7 +207,7 @@ with st.sidebar:
     <div class='nav-label'>Navigation</div>
     """, unsafe_allow_html=True)
 
-    page = st.radio("", [
+    page = st.radio("Navigation", [
         "Vue d'ensemble",
         "Analyse des données",
         "Prédiction temps réel",
@@ -259,7 +259,7 @@ if "Vue d'ensemble" in page:
                           paper_bgcolor='rgba(0,0,0,0)',
                           legend=dict(font=dict(color=C_DARK), bgcolor='rgba(255,255,255,0.9)'),
                           height=350, margin=dict(l=20,r=20,t=40,b=20))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col2:
         fm = df.groupby('operating_mode')['failure_within_24h'].mean().reset_index()
@@ -269,7 +269,7 @@ if "Vue d'ensemble" in page:
                      color='Taux', color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_RED]],
                      text=fm.sort_values('Taux')['Taux'].map(lambda x: f"{x:.1%}"))
         fig.update_traces(textposition='outside', textfont=dict(color=C_DARK))
-        st.plotly_chart(theme(fig, 350), use_container_width=True)
+        st.plotly_chart(theme(fig, 350), width="stretch")
 
     st.markdown("---")
     col1, col2 = st.columns(2)
@@ -282,14 +282,14 @@ if "Vue d'ensemble" in page:
                      color='Taux', color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_RED]],
                      text=ft.sort_values('Taux', ascending=False)['Taux'].map(lambda x: f"{x:.1%}"))
         fig.update_traces(textposition='outside', textfont=dict(color=C_DARK))
-        st.plotly_chart(theme(fig, 350), use_container_width=True)
+        st.plotly_chart(theme(fig, 350), width="stretch")
 
     with col2:
         cross = df.groupby(['machine_type','operating_mode'])['failure_within_24h'].mean().unstack()
         fig = px.imshow(cross, text_auto='.1%',
                         color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_RED]],
                         title="Taux de panne : Machine x Mode opératoire")
-        st.plotly_chart(theme(fig, 350), use_container_width=True)
+        st.plotly_chart(theme(fig, 350), width="stretch")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 2
@@ -311,7 +311,7 @@ elif "Analyse" in page:
                            barmode='overlay', opacity=0.75,
                            title=f"Distribution — {FEATURE_LABELS.get(feature, feature)}")
         fig.for_each_trace(lambda t: t.update(name='Sain' if t.name=='0' else 'Panne'))
-        st.plotly_chart(theme(fig), use_container_width=True)
+        st.plotly_chart(theme(fig), width="stretch")
 
     with col2:
         fig = px.box(df, x='failure_within_24h', y=feature,
@@ -319,7 +319,7 @@ elif "Analyse" in page:
                      color_discrete_map={0: C_GREEN2, 1: C_RED},
                      title="Boxplot — OK vs Panne")
         fig.for_each_trace(lambda t: t.update(name='Sain' if t.name=='0' else 'Panne'))
-        st.plotly_chart(theme(fig), use_container_width=True)
+        st.plotly_chart(theme(fig), width="stretch")
 
     st.markdown("---")
     col1, col2 = st.columns(2)
@@ -329,11 +329,11 @@ elif "Analyse" in page:
         fig = px.imshow(corr, text_auto='.2f',
                         color_continuous_scale=[[0,C_BLUE],[0.5,'#FFFFFF'],[1,C_GREEN]],
                         title="Matrice de corrélation des capteurs")
-        st.plotly_chart(theme(fig, 450), use_container_width=True)
+        st.plotly_chart(theme(fig, 450), width="stretch")
 
     with col2:
         st.markdown("<h3>Statistiques descriptives</h3>", unsafe_allow_html=True)
-        st.dataframe(df[NUMERIC_FEATURES].describe().round(3), use_container_width=True, height=420)
+        st.dataframe(df[NUMERIC_FEATURES].describe().round(3), width="stretch", height=420)
 
     st.markdown("---")
     c1, c2, c3 = st.columns(3)
@@ -433,11 +433,11 @@ elif "Prédiction" in page:
             fig.update_layout(paper_bgcolor='rgba(0,0,0,0)',
                               font=dict(color=C_DARK),
                               height=280, margin=dict(l=20,r=20,t=40,b=20))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         st.markdown("---")
         st.markdown("<h3>Paramètres saisis</h3>", unsafe_allow_html=True)
-        st.dataframe(input_data.rename(columns=FEATURE_LABELS), use_container_width=True)
+        st.dataframe(input_data.rename(columns=FEATURE_LABELS), width="stretch")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 4
@@ -479,7 +479,7 @@ elif "Performance" in page:
         legend=dict(bgcolor='rgba(255,255,255,0.9)', font=dict(color=C_DARK),
                     bordercolor=C_BORDER, borderwidth=1), height=420
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.markdown("---")
     col1, col2 = st.columns(2)
@@ -492,12 +492,12 @@ elif "Performance" in page:
                      color_continuous_scale=[[0,C_GREEN3],[0.7,C_GREEN2],[1,C_GREEN]],
                      text=df_res.sort_values(metric, ascending=True)[metric].map(lambda x: f"{x:.4f}"))
         fig.update_traces(textposition='outside', textfont=dict(color=C_DARK))
-        st.plotly_chart(theme(fig, 320), use_container_width=True)
+        st.plotly_chart(theme(fig, 320), width="stretch")
     with col2:
         st.dataframe(df_res.style
                      .highlight_max(axis=0, subset=cats, color='rgba(27,138,62,0.15)')
                      .format({c:'{:.4f}' for c in cats}),
-                     use_container_width=True, height=220)
+                     width="stretch", height=220)
         st.markdown(f"""
         <div class='info-card' style='margin-top:12px;'>
           <b>Modèle retenu : XGBoost</b><br>
@@ -515,7 +515,7 @@ elif "Performance" in page:
         'F1 moyen': [0.9127, 0.8932, 0.7454],
         'ROC-AUC moyen': [0.9949, 0.9930, 0.9562],
     })
-    st.dataframe(cv, use_container_width=True)
+    st.dataframe(cv, width="stretch")
 
     st.markdown("---")
     st.markdown("<h3>Techniques de gestion du déséquilibre</h3>", unsafe_allow_html=True)
@@ -528,7 +528,7 @@ elif "Performance" in page:
     fig = px.bar(imb, x='Technique', y=['Recall', 'F1', 'ROC-AUC'], barmode='group',
                  title="Comparaison des techniques de rééquilibrage",
                  color_discrete_map={'Recall': C_RED, 'F1': C_GREEN, 'ROC-AUC': C_BLUE})
-    st.plotly_chart(theme(fig, 360), use_container_width=True)
+    st.plotly_chart(theme(fig, 360), width="stretch")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 5
@@ -547,7 +547,7 @@ elif "SHAP" in page:
                  color='Importance',
                  color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_GREEN]])
     fig.update_traces(texttemplate='%{x:.3f}', textposition='outside', textfont=dict(color=C_DARK, size=11))
-    st.plotly_chart(theme(fig, 500), use_container_width=True)
+    st.plotly_chart(theme(fig, 500), width="stretch")
 
     st.markdown("---")
     shap_s = os.path.join(BASE_DIR, 'reports', 'shap_summary.png')
@@ -557,11 +557,11 @@ elif "SHAP" in page:
         if os.path.exists(shap_s):
             with col1:
                 st.markdown("<h3>SHAP Summary Plot</h3>", unsafe_allow_html=True)
-                st.image(shap_s, use_container_width=True)
+                st.image(shap_s, width="stretch")
         if os.path.exists(shap_a):
             with col2:
                 st.markdown("<h3>SHAP — Analyse détaillée</h3>", unsafe_allow_html=True)
-                st.image(shap_a, use_container_width=True)
+                st.image(shap_a, width="stretch")
 
     st.markdown("---")
     st.markdown("<h3>Interprétation métier des variables clés</h3>", unsafe_allow_html=True)
