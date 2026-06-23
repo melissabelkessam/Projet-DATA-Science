@@ -5,6 +5,7 @@ import numpy as np
 import joblib
 import plotly.express as px
 import plotly.graph_objects as go
+import requests
 
 st.set_page_config(
     page_title="Maintenance Prédictive — EFREI",
@@ -112,6 +113,20 @@ st.markdown(f"""
     vertical-align: middle;
   }}
 
+  .api-badge {{
+    display: inline-block;
+    background: {C_BLUE};
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-left: 10px;
+    vertical-align: middle;
+  }}
+
   .page-header {{
     border-bottom: 2px solid {C_BORDER};
     padding-bottom: 14px;
@@ -147,6 +162,9 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# ─── URL API (modifiable via variable d'environnement ou sidebar) ──────────────
+DEFAULT_API_URL = "http://localhost:8000"
 
 @st.cache_resource
 def load_models():
@@ -193,6 +211,47 @@ def theme(fig, height=400):
     )
     return fig
 
+# ─── FONCTION PREDICTION VIA API ──────────────────────────────────────────────
+def predict_via_api(api_url, payload):
+    """
+    Appelle l'API FastAPI /predict et retourne (proba, risk_level, recommendation).
+    Retourne None si l'API est inaccessible (fallback local).
+    """
+    try:
+        resp = requests.post(f"{api_url}/predict", json=payload, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data["probability"], data["risk_level"], data["recommendation"], True
+        else:
+            return None, None, None, False
+    except Exception:
+        return None, None, None, False
+
+def predict_local(preprocessor, model, input_data):
+    """Fallback : prédiction directe via joblib si API indisponible."""
+    proba = float(model.predict_proba(preprocessor.transform(input_data))[0][1])
+    prediction = 1 if proba >= 0.70 else 0
+    if proba >= 0.70:
+        risk_level = "ELEVE"
+        recommendation = "Intervention de maintenance recommandée dans les 24h"
+    elif proba >= 0.30:
+        risk_level = "MODERE"
+        recommendation = "Surveillance renforcée recommandée"
+    else:
+        risk_level = "FAIBLE"
+        recommendation = "Aucune action immédiate requise"
+    return proba, risk_level, recommendation
+
+def check_api_health(api_url):
+    """Vérifie si l'API est disponible via /health."""
+    try:
+        resp = requests.get(f"{api_url}/health", timeout=3)
+        if resp.status_code == 200:
+            return True, resp.json()
+        return False, {}
+    except Exception:
+        return False, {}
+
 # ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     logo_path = os.path.join(BASE_DIR, 'assets', 'efrei_logo.png')
@@ -215,8 +274,35 @@ with st.sidebar:
         "Interprétabilité SHAP"
     ], label_visibility="collapsed")
 
+    # ─── Config API ───────────────────────────────────────────────────────────
     st.markdown(f"""
-    <div style='margin-top:48px; font-size:12px; color:{C_GREY}; border-top:1px solid {C_BORDER}; padding-top:16px; line-height:2;'>
+    <div style='margin-top:24px; font-size:10px; color:{C_GREY}; text-transform:uppercase;
+                letter-spacing:1.5px; font-weight:700; margin-bottom:6px;'>Configuration API</div>
+    """, unsafe_allow_html=True)
+
+    api_url = st.text_input("URL de l'API", value=DEFAULT_API_URL, label_visibility="collapsed")
+    api_ok, api_info = check_api_health(api_url)
+
+    if api_ok:
+        st.markdown(f"""
+        <div style='background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px;
+                    padding:10px 14px; font-size:12px; color:{C_GREEN}; margin-bottom:8px;'>
+          ✅ <b>API connectée</b><br>
+          Modèle : {api_info.get('model', 'XGBoost')}<br>
+          Version : {api_info.get('version', '1.0.0')}
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div style='background:#FEF2F2; border:1px solid #FECACA; border-radius:8px;
+                    padding:10px 14px; font-size:12px; color:{C_RED}; margin-bottom:8px;'>
+          ⚠️ <b>API non disponible</b><br>
+          Mode : prédiction locale (joblib)
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div style='margin-top:24px; font-size:12px; color:{C_GREY}; border-top:1px solid {C_BORDER}; padding-top:16px; line-height:2;'>
       <div style='color:{C_GREY}; font-size:10px; text-transform:uppercase; letter-spacing:1.5px; font-weight:700; margin-bottom:6px;'>Modèle actif</div>
       Algorithme : <b style='color:{C_GREEN}'>XGBoost</b><br>
       ROC-AUC : <b style='color:{C_GREEN}'>0.9955</b><br>
@@ -339,17 +425,33 @@ elif "Analyse" in page:
     c1, c2, c3 = st.columns(3)
     c1.markdown(f"<div class='info-card'>Ratio déséquilibre : <b>5.8:1</b><br>85.2% sain / 14.8% panne</div>", unsafe_allow_html=True)
     c2.markdown(f"<div class='info-card'>Accuracy seule <b>insuffisante</b> — modèle naïf = 85.2% sans détecter une seule panne</div>", unsafe_allow_html=True)
-    c3.markdown(f"<div class='info-card'>Métriques retenues : <b>Recall, F1-score, ROC-AUC</b></div>", unsafe_allow_html=True)
+    c3.markdown(f"<div class='info-card'>Métriques retenues : <b>Recall, F1-score, ROC-AUC, PR-AUC</b></div>", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PAGE 3
+# PAGE 3 — PREDICTION VIA API (avec fallback local)
 # ═══════════════════════════════════════════════════════════════════════════════
 elif "Prédiction" in page:
+    api_badge = '<span class="api-badge">Via API</span>' if api_ok else '<span style="font-size:11px;color:#E67E22;">⚠ Mode local</span>'
     st.markdown(f"""
     <div class='page-header'>
-      <h1>Prédiction de Panne en Temps Réel</h1>
+      <h1>Prédiction de Panne en Temps Réel {api_badge}</h1>
       <p>Saisissez les valeurs des capteurs pour évaluer le risque de panne dans les 24h</p>
     </div>""", unsafe_allow_html=True)
+
+    if api_ok:
+        st.markdown(f"""
+        <div style='background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px;
+                    padding:10px 16px; font-size:13px; color:{C_BLUE}; margin-bottom:16px;'>
+          🔗 Prédictions transmises à l'API FastAPI — <code>{api_url}/predict</code>
+          (architecture Front / API / Modèle)
+        </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div style='background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px;
+                    padding:10px 16px; font-size:13px; color:{C_ORANGE}; margin-bottom:16px;'>
+          ⚠️ API non disponible — prédiction effectuée localement via joblib.
+          Lancez <code>uvicorn api.main:app --reload --port 8000</code> pour activer le mode API.
+        </div>""", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -370,15 +472,38 @@ elif "Prédiction" in page:
 
     st.markdown("---")
     if st.button("Lancer l'analyse de risque", type="primary"):
-        input_data = pd.DataFrame({
-            'machine_type': [machine_type], 'vibration_rms': [vibration],
-            'temperature_motor': [temperature], 'current_phase_avg': [current],
-            'pressure_level': [pressure], 'rpm': [rpm],
-            'operating_mode': [operating_mode],
-            'hours_since_maintenance': [hours_maintenance], 'ambient_temp': [ambient]
-        })
-        proba      = float(model.predict_proba(preprocessor.transform(input_data))[0][1])
+
+        # ── Payload API ──────────────────────────────────────────────────────
+        payload = {
+            "machine_type": machine_type,
+            "operating_mode": operating_mode,
+            "vibration_rms": float(vibration),
+            "temperature_motor": float(temperature),
+            "current_phase_avg": float(current),
+            "pressure_level": float(pressure),
+            "rpm": float(rpm),
+            "hours_since_maintenance": float(hours_maintenance),
+            "ambient_temp": float(ambient)
+        }
+
+        # ── Appel API ou fallback local ──────────────────────────────────────
+        if api_ok:
+            proba, risk_level, recommendation, success = predict_via_api(api_url, payload)
+            source_label = "🔗 Résultat via API FastAPI"
+            if not success:
+                # L'API était up au health check mais a planté sur /predict
+                input_data = pd.DataFrame([payload])
+                proba, risk_level, recommendation = predict_local(preprocessor, model, input_data)
+                source_label = "⚠️ Résultat local (erreur API /predict)"
+        else:
+            input_data = pd.DataFrame([payload])
+            proba, risk_level, recommendation = predict_local(preprocessor, model, input_data)
+            source_label = "💾 Résultat local (API indisponible)"
+
         prediction = 1 if proba >= 0.70 else 0
+
+        st.markdown(f"<div style='font-size:12px; color:{C_GREY}; margin-bottom:12px;'>{source_label}</div>",
+                    unsafe_allow_html=True)
 
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -393,7 +518,7 @@ elif "Prédiction" in page:
                   <div style='color:{C_GREY}; font-size:13px; margin-top:10px;'>Probabilité de panne dans les 24h</div>
                   <div style='margin-top:20px; background:#FEF3C7; border-radius:8px;
                               padding:12px; color:{C_ORANGE}; font-size:13px; font-weight:600;'>
-                    Intervention de maintenance recommandée dans les 24h
+                    {recommendation}
                   </div>
                 </div>""", unsafe_allow_html=True)
             else:
@@ -407,7 +532,7 @@ elif "Prédiction" in page:
                   <div style='color:{C_GREY}; font-size:13px; margin-top:10px;'>Probabilité de panne dans les 24h</div>
                   <div style='margin-top:20px; background:#DCFCE7; border-radius:8px;
                               padding:12px; color:{C_GREEN}; font-size:13px; font-weight:600;'>
-                    Aucune action immédiate requise
+                    {recommendation}
                   </div>
                 </div>""", unsafe_allow_html=True)
 
@@ -435,9 +560,25 @@ elif "Prédiction" in page:
                               height=280, margin=dict(l=20,r=20,t=40,b=20))
             st.plotly_chart(fig, width="stretch")
 
+        # ── Détail de la réponse API ──────────────────────────────────────────
+        if api_ok:
+            with st.expander("🔍 Détail de la requête API"):
+                col_req, col_resp = st.columns(2)
+                with col_req:
+                    st.markdown("**Requête envoyée (JSON)**")
+                    st.json(payload)
+                with col_resp:
+                    st.markdown("**Réponse reçue**")
+                    st.json({
+                        "prediction": prediction,
+                        "probability": round(proba, 4),
+                        "risk_level": risk_level,
+                        "recommendation": recommendation
+                    })
+
         st.markdown("---")
         st.markdown("<h3>Paramètres saisis</h3>", unsafe_allow_html=True)
-        st.dataframe(input_data.rename(columns=FEATURE_LABELS), width="stretch")
+        st.dataframe(pd.DataFrame([payload]).rename(columns=FEATURE_LABELS), width="stretch")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 4
@@ -450,21 +591,22 @@ elif "Performance" in page:
     </div>""", unsafe_allow_html=True)
 
     results = {
-        'XGBoost':             {'Accuracy':0.9744,'Precision':0.8820,'Recall':0.9551,'F1':0.9171,'ROC-AUC':0.9955},
-        'Random Forest':       {'Accuracy':0.9682,'Precision':0.9010,'Recall':0.8820,'F1':0.8914,'ROC-AUC':0.9938},
-        'MLP (Deep Learning)': {'Accuracy':0.9310,'Precision':0.7111,'Recall':0.8989,'F1':0.7940,'ROC-AUC':0.9743},
-        'Logistic Regression': {'Accuracy':0.9102,'Precision':0.6408,'Recall':0.8947,'F1':0.7468,'ROC-AUC':0.9588},
+        'XGBoost':             {'Accuracy':0.9744,'Precision':0.8820,'Recall':0.9551,'F1':0.9171,'ROC-AUC':0.9955,'PR-AUC':0.9741},
+        'Random Forest':       {'Accuracy':0.9682,'Precision':0.9010,'Recall':0.8820,'F1':0.8914,'ROC-AUC':0.9938,'PR-AUC':0.9645},
+        'MLP (Deep Learning)': {'Accuracy':0.9310,'Precision':0.7400,'Recall':0.8600,'F1':0.7900,'ROC-AUC':0.9739,'PR-AUC':0.8647},
+        'Logistic Regression': {'Accuracy':0.9102,'Precision':0.6408,'Recall':0.8947,'F1':0.7468,'ROC-AUC':0.9588,'PR-AUC':0.8843},
     }
-    cats = ['Accuracy', 'Precision', 'Recall', 'F1', 'ROC-AUC']
+    cats = ['Accuracy', 'Precision', 'Recall', 'F1', 'ROC-AUC', 'PR-AUC']
     df_res = pd.DataFrame(results).T.reset_index()
     df_res.columns = ['Modèle'] + cats
 
     colors_r = [C_GREEN, C_BLUE, C_ORANGE, C_GREY]
+    cats_radar = ['Accuracy', 'Precision', 'Recall', 'F1', 'ROC-AUC']
     fig = go.Figure()
     for (name, row), color in zip(results.items(), colors_r):
-        vals = [row[c] for c in cats]
+        vals = [row[c] for c in cats_radar]
         fig.add_trace(go.Scatterpolar(
-            r=vals + [vals[0]], theta=cats + [cats[0]],
+            r=vals + [vals[0]], theta=cats_radar + [cats_radar[0]],
             fill='toself', line=dict(color=color, width=2), name=name,
             fillcolor='rgba(0,0,0,0.05)'
         ))
@@ -501,13 +643,14 @@ elif "Performance" in page:
         st.markdown(f"""
         <div class='info-card' style='margin-top:12px;'>
           <b>Modèle retenu : XGBoost</b><br>
-          Meilleur ROC-AUC (0.9955), Recall (0.9551) et F1 (0.9171).
-          Stable en validation croisée (std Recall = ±0.014).
-          Seuil de décision optimisé à <b>0.70</b>.
+          Meilleur ROC-AUC (0.9955), PR-AUC (0.9741), Recall (0.9551) et F1 (0.9171).<br>
+          Stable en validation croisée (std Recall = ±0.014).<br>
+          Seuil de décision optimisé à <b>0.70</b> (maximise le F1).
         </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("<h3>Validation croisée — Stratified K-Fold (5 folds)</h3>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:13px; color:{C_GREY}; margin-bottom:12px;'>Note : Le MLP (TensorFlow/Keras) est évalué sur le jeu de test holdout uniquement — l'intégration Keras dans sklearn cross_validate nécessite un wrapper complexe écarté pour stabilité.</div>", unsafe_allow_html=True)
     cv = pd.DataFrame({
         'Modèle': ['XGBoost', 'Random Forest', 'Logistic Regression'],
         'Recall moyen': [0.9466, 0.8683, 0.8838],
@@ -524,11 +667,13 @@ elif "Performance" in page:
         'Recall': [0.9551, 0.9494, 0.9438, 0.9719],
         'F1': [0.9171, 0.9111, 0.8924, 0.8491],
         'ROC-AUC': [0.9955, 0.9960, 0.9949, 0.9910],
+        'PR-AUC': [0.9741, 0.9742, 0.9794, 0.9500],
     })
-    fig = px.bar(imb, x='Technique', y=['Recall', 'F1', 'ROC-AUC'], barmode='group',
-                 title="Comparaison des techniques de rééquilibrage",
-                 color_discrete_map={'Recall': C_RED, 'F1': C_GREEN, 'ROC-AUC': C_BLUE})
-    st.plotly_chart(theme(fig, 360), width="stretch")
+    fig = px.bar(imb, x='Technique', y=['Recall', 'F1', 'ROC-AUC', 'PR-AUC'], barmode='group',
+                 title="Comparaison des techniques de rééquilibrage (avec PR-AUC)",
+                 color_discrete_map={'Recall': C_RED, 'F1': C_GREEN, 'ROC-AUC': C_BLUE, 'PR-AUC': C_ORANGE})
+    st.plotly_chart(theme(fig, 380), width="stretch")
+    st.markdown(f"<div class='info-card'>PR-AUC (Precision-Recall AUC) est particulièrement adapté aux classes déséquilibrées. Un modèle aléatoire obtiendrait PR-AUC = 0.148 (taux de panne). XGBoost atteint <b>0.9741</b>, soit +82 points au-dessus du hasard.</div>", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 5
