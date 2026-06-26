@@ -10,29 +10,22 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import api.main as api_module
+from fastapi.testclient import TestClient
 
-# ── Mock des modèles pour éviter de charger les fichiers réels ────────────────
 
-@pytest.fixture(autouse=True)
-def mock_models():
-    """Remplace joblib.load par des mocks pour les tests."""
+@pytest.fixture
+def client():
     mock_preprocessor = MagicMock()
     mock_preprocessor.transform.return_value = np.zeros((1, 14))
 
     mock_model = MagicMock()
     mock_model.predict_proba.return_value = np.array([[0.85, 0.15]])
 
-    with patch("joblib.load", side_effect=[mock_preprocessor, mock_model]):
-        yield
+    api_module.preprocessor = mock_preprocessor
+    api_module.model = mock_model
+    api_module._model_loaded = True
 
-
-@pytest.fixture
-def client():
-    from fastapi.testclient import TestClient
-    # Import après le mock
-    import importlib
-    import api.main as api_module
-    importlib.reload(api_module)
     return TestClient(api_module.app)
 
 
@@ -48,8 +41,6 @@ VALID_PAYLOAD = {
     "ambient_temp":             13.0,
 }
 
-
-# ── Tests ─────────────────────────────────────────────────────────────────────
 
 def test_health_returns_ok(client):
     response = client.get("/health")
@@ -67,9 +58,9 @@ def test_predict_returns_200(client):
 def test_predict_response_structure(client):
     response = client.post("/predict", json=VALID_PAYLOAD)
     data = response.json()
-    assert "prediction"    in data
-    assert "probability"   in data
-    assert "risk_level"    in data
+    assert "prediction"     in data
+    assert "probability"    in data
+    assert "risk_level"     in data
     assert "recommendation" in data
 
 
@@ -95,14 +86,12 @@ def test_model_info_returns_metrics(client):
 
 
 def test_predict_invalid_machine_type(client):
-    """Un type de machine invalide doit renvoyer une erreur de validation."""
     payload = {**VALID_PAYLOAD, "machine_type": "INVALID_TYPE"}
     response = client.post("/predict", json=payload)
     assert response.status_code == 422
 
 
 def test_predict_out_of_range_temperature(client):
-    """Une température hors plage doit renvoyer 422."""
     payload = {**VALID_PAYLOAD, "temperature_motor": 999.0}
     response = client.post("/predict", json=payload)
     assert response.status_code == 422
