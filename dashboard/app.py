@@ -52,6 +52,9 @@ st.markdown(f"""
   .nav-label {{ color: {C_GREY}; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 8px; padding-left: 4px; }}
   .section-label {{ color: {C_GREY}; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 12px; }}
   [data-testid="stDataFrame"] {{ border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
+  .kpi-alert {{ background: #FEF2F2; border: 1px solid #FECACA; border-top: 4px solid {C_RED}; border-radius: 10px; padding: 20px; text-align: center; }}
+  .kpi-ok {{ background: #F0FDF4; border: 1px solid #BBF7D0; border-top: 4px solid {C_GREEN}; border-radius: 10px; padding: 20px; text-align: center; }}
+  .kpi-warn {{ background: #FFFBEB; border: 1px solid #FDE68A; border-top: 4px solid {C_ORANGE}; border-radius: 10px; padding: 20px; text-align: center; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -186,64 +189,176 @@ with st.sidebar:
 
     st.markdown(f"""
     <div style='margin-top:24px; font-size:12px; color:{C_GREY}; border-top:1px solid {C_BORDER}; padding-top:16px; line-height:2;'>
-      <div style='color:{C_GREY}; font-size:10px; text-transform:uppercase; letter-spacing:1.5px; font-weight:700; margin-bottom:6px;'>Modèles actifs</div>
-      Classification : <b style='color:{C_GREEN}'>XGBoost</b><br>
-      ROC-AUC : <b style='color:{C_GREEN}'>0.9955</b> · Recall : <b style='color:{C_GREEN}'>0.9551</b><br>
-      Seuil : <b style='color:{C_ORANGE}'>0.70</b><br><br>
+      <div style='color:{C_GREY}; font-size:10px; text-transform:uppercase; letter-spacing:1.5px; font-weight:700; margin-bottom:6px;'>Modèle de prédiction</div>
+      <b style='color:{C_GREEN}'>XGBoost</b> (modèle retenu)<br>
+      ROC-AUC : <b style='color:{C_GREEN}'>0.9955</b><br>
+      Recall : <b style='color:{C_GREEN}'>95.5%</b><br>
+      Seuil décision : <b style='color:{C_ORANGE}'>0.70</b><br><br>
       RUL (Bonus) : <b style='color:{C_GREEN}'>Random Forest</b><br>
-      MAE : <b style='color:{C_GREEN}'>9.42h</b> · R² : <b style='color:{C_GREEN}'>0.67</b><br>
-      Modèle RUL : <b style='color:{"#1B8A3E" if rul_model else "#E74C3C"}'>{rul_status}</b>
+      MAE : <b style='color:{C_GREEN}'>9.42h</b> · R² : <b style='color:{C_GREEN}'>0.67</b>
     </div>
     """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PAGE 1 — VUE D'ENSEMBLE
+# PAGE 1 — VUE D'ENSEMBLE (orientée métier)
 # ═══════════════════════════════════════════════════════════════════════════════
 if "Vue d'ensemble" in page:
-    st.markdown(f"""<div class='page-header'><h1>Tableau de bord — Maintenance Prédictive <span class='badge'>Live</span></h1><p>{len(df):,} enregistrements analysés — Parc de machines industrielles</p></div>""", unsafe_allow_html=True)
-    n_pannes = int(df['failure_within_24h'].sum())
-    taux = df['failure_within_24h'].mean()
+    st.markdown(f"""<div class='page-header'>
+      <h1>Tableau de bord — Maintenance Prédictive <span class='badge'>Live</span></h1>
+      <p>Système IA de détection de pannes industrielles · Modèle XGBoost · {len(df):,} observations analysées</p>
+    </div>""", unsafe_allow_html=True)
+
+    # ── KPI métier principaux ──────────────────────────────────────────────────
+    n_pannes    = int(df['failure_within_24h'].sum())
+    n_saines    = len(df) - n_pannes
+    taux        = df['failure_within_24h'].mean()
+    df_parc     = generate_parc_machines()
+    n_critique  = len(df_parc[df_parc['Statut'].str.contains('CRITIQUE')])
+    n_attention = len(df_parc[df_parc['Statut'].str.contains('ATTENTION')])
+    n_ok        = len(df_parc[df_parc['Statut'].str.contains('OK')])
+
+    st.markdown("### 🏭 État actuel du parc machines")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Observations", f"{len(df):,}")
-    c2.metric("Pannes détectées", f"{n_pannes:,}", f"{taux:.1%} du parc")
-    c3.metric("Types de machines", df['machine_type'].nunique())
-    c4.metric("Modes opératoires", df['operating_mode'].nunique())
+    with c1:
+        st.markdown(f"""<div class='kpi-alert'>
+          <div style='font-size:11px; font-weight:700; color:{C_RED}; text-transform:uppercase; letter-spacing:1px;'>🔴 Machines critiques</div>
+          <div style='font-size:42px; font-weight:900; color:{C_RED}; line-height:1.2;'>{n_critique}</div>
+          <div style='font-size:12px; color:{C_GREY};'>Intervention requise &lt; 24h</div>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"""<div class='kpi-warn'>
+          <div style='font-size:11px; font-weight:700; color:{C_ORANGE}; text-transform:uppercase; letter-spacing:1px;'>🟠 Machines en attention</div>
+          <div style='font-size:42px; font-weight:900; color:{C_ORANGE}; line-height:1.2;'>{n_attention}</div>
+          <div style='font-size:12px; color:{C_GREY};'>Inspection sous 48-72h</div>
+        </div>""", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"""<div class='kpi-ok'>
+          <div style='font-size:11px; font-weight:700; color:{C_GREEN}; text-transform:uppercase; letter-spacing:1px;'>🟢 Machines opérationnelles</div>
+          <div style='font-size:42px; font-weight:900; color:{C_GREEN}; line-height:1.2;'>{n_ok}</div>
+          <div style='font-size:12px; color:{C_GREY};'>Aucune action requise</div>
+        </div>""", unsafe_allow_html=True)
+    with c4:
+        st.markdown(f"""<div style='background:{C_PANEL}; border:1px solid {C_BORDER}; border-top:4px solid {C_BLUE}; border-radius:10px; padding:20px; text-align:center;'>
+          <div style='font-size:11px; font-weight:700; color:{C_BLUE}; text-transform:uppercase; letter-spacing:1px;'>📊 Total parc</div>
+          <div style='font-size:42px; font-weight:900; color:{C_DARK}; line-height:1.2;'>{len(df_parc)}</div>
+          <div style='font-size:12px; color:{C_GREY};'>machines surveillées</div>
+        </div>""", unsafe_allow_html=True)
+
     st.markdown("---")
+
+    # ── Alertes prioritaires ───────────────────────────────────────────────────
+    st.markdown("### 🚨 Alertes prioritaires — Machines à risque")
+    top_alertes = df_parc[df_parc['Statut'].str.contains('CRITIQUE|ATTENTION')].head(5)
+    if len(top_alertes) == 0:
+        st.success("✅ Aucune machine en état critique actuellement.")
+    else:
+        cols = st.columns(min(len(top_alertes), 5))
+        for i, (_, row) in enumerate(top_alertes.iterrows()):
+            with cols[i]:
+                is_crit = 'CRITIQUE' in row['Statut']
+                color = C_RED if is_crit else C_ORANGE
+                bg    = "#FEF2F2" if is_crit else "#FFFBEB"
+                st.markdown(f"""<div style='background:{bg}; border:1px solid {color}; border-top:4px solid {color}; border-radius:10px; padding:16px; text-align:center;'>
+                  <div style='font-size:18px; font-weight:900; color:{color};'>{row['ID']}</div>
+                  <div style='font-size:11px; color:{C_GREY}; margin:3px 0;'>{row['Type']}</div>
+                  <div style='font-size:28px; font-weight:800; color:{color};'>{row['Prob. panne (%)']:.0f}%</div>
+                  <div style='font-size:10px; color:{C_GREY};'>risque panne</div>
+                  <div style='margin-top:8px; font-size:12px; color:{color}; font-weight:600;'>RUL : {row['RUL estimé (h)']:.0f}h</div>
+                  <div style='font-size:10px; color:{C_GREY};'>{row['Statut']}</div>
+                </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Stats dataset historique + perf modèle ────────────────────────────────
+    st.markdown("### 📈 Données historiques & performance du modèle IA")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Répartition des pannes — dataset historique (24 042 observations)**")
+        counts = df['failure_within_24h'].value_counts()
+        fig = go.Figure(go.Pie(
+            values=[n_saines, n_pannes],
+            labels=['Machine saine', 'Panne dans les 24h'],
+            marker=dict(colors=[C_GREEN2, C_RED]),
+            hole=0.55,
+            textfont=dict(color=C_WHITE, size=13),
+            textinfo='label+percent'
+        ))
+        fig.add_annotation(
+            text=f"<b>{n_pannes:,}</b><br>pannes<br>détectées",
+            x=0.5, y=0.5,
+            font=dict(size=14, color=C_DARK),
+            showarrow=False
+        )
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            legend=dict(font=dict(color=C_DARK), bgcolor='rgba(255,255,255,0.9)'),
+            height=320, margin=dict(l=20,r=20,t=20,b=20)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown(f"""<div class='info-card'>
+          Sur <b>{len(df):,} enregistrements</b> historiques :<br>
+          • <b style='color:{C_RED}'>{n_pannes:,} pannes</b> détectées ({taux:.1%} du parc)<br>
+          • <b style='color:{C_GREEN}'>{n_saines:,} machines saines</b> ({1-taux:.1%})<br>
+          Déséquilibre géré par <b>class_weight + seuil 0.70</b>
+        </div>""", unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("**Performance du modèle XGBoost — sélectionné pour la production**")
+        metriques = {
+            'ROC-AUC': 0.9955, 'Recall': 0.9551,
+            'Précision': 0.8820, 'F1-Score': 0.9171, 'Accuracy': 0.9744
+        }
+        fig = go.Figure()
+        colors_bar = [C_GREEN, C_GREEN, C_GREEN2, C_GREEN2, C_GREEN3]
+        for (nom, val), col in zip(metriques.items(), colors_bar):
+            fig.add_trace(go.Bar(
+                x=[nom], y=[val],
+                marker_color=col,
+                text=[f"{val:.4f}"],
+                textposition='outside',
+                textfont=dict(color=C_DARK, size=13),
+                name=nom
+            ))
+        fig.update_layout(
+            showlegend=False,
+            yaxis=dict(range=[0.85, 1.02], gridcolor=C_BORDER),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(240,248,240,0.4)',
+            font=dict(color=C_DARK),
+            height=320, margin=dict(l=20,r=20,t=20,b=40)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown(f"""<div class='info-card'>
+          Modèle <b>XGBoost</b> retenu (meilleur parmi 4 testés) :<br>
+          • Détecte <b style='color:{C_GREEN}'>95.5% des pannes</b> (Recall)<br>
+          • <b style='color:{C_GREEN}'>1 fausse alarme sur 8</b> seulement (Précision 88%)<br>
+          • Seuil de décision optimisé à <b>0.70</b> pour maximiser le F1
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Taux de panne par type de machine ────────────────────────────────────
+    st.markdown("### 🔧 Taux de panne par type de machine et mode opératoire")
     col1, col2 = st.columns(2)
     with col1:
-        counts = df['failure_within_24h'].value_counts()
-        fig = go.Figure(go.Pie(values=counts.values, labels=['Machine saine', 'Risque de panne'],
-            marker=dict(colors=[C_GREEN2, C_RED]), hole=0.55, textfont=dict(color=C_WHITE, size=13)))
-        fig.add_annotation(text=f"<b>{taux:.1%}</b><br>pannes", x=0.5, y=0.5, font=dict(size=18, color=C_DARK), showarrow=False)
-        fig.update_layout(title=dict(text="Répartition des classes", font=dict(color=C_DARK)),
-            paper_bgcolor='rgba(0,0,0,0)', legend=dict(font=dict(color=C_DARK), bgcolor='rgba(255,255,255,0.9)'),
-            height=350, margin=dict(l=20,r=20,t=40,b=20))
-        st.plotly_chart(fig, width="stretch")
+        ft = df.groupby('machine_type')['failure_within_24h'].agg(['sum','count','mean']).reset_index()
+        ft.columns = ['Type', 'Nb pannes', 'Total', 'Taux']
+        fig = px.bar(ft.sort_values('Taux', ascending=False), x='Type', y='Nb pannes',
+            title="Nombre de pannes par type de machine",
+            color='Taux', color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_RED]],
+            text='Nb pannes')
+        fig.update_traces(textposition='outside', textfont=dict(color=C_DARK))
+        st.plotly_chart(theme(fig, 320), use_container_width=True)
     with col2:
-        fm = df.groupby('operating_mode')['failure_within_24h'].mean().reset_index()
-        fm.columns = ['Mode', 'Taux']
+        fm = df.groupby('operating_mode')['failure_within_24h'].agg(['sum','mean']).reset_index()
+        fm.columns = ['Mode', 'Nb pannes', 'Taux']
         fig = px.bar(fm.sort_values('Taux', ascending=True), x='Taux', y='Mode', orientation='h',
-            title="Taux de panne par mode opératoire", color='Taux',
-            color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_RED]],
+            title="Taux de panne par mode opératoire",
+            color='Taux', color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_RED]],
             text=fm.sort_values('Taux')['Taux'].map(lambda x: f"{x:.1%}"))
         fig.update_traces(textposition='outside', textfont=dict(color=C_DARK))
-        st.plotly_chart(theme(fig, 350), width="stretch")
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        ft = df.groupby('machine_type')['failure_within_24h'].mean().reset_index()
-        ft.columns = ['Type', 'Taux']
-        fig = px.bar(ft.sort_values('Taux', ascending=False), x='Type', y='Taux',
-            title="Taux de panne par type de machine", color='Taux',
-            color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_RED]],
-            text=ft.sort_values('Taux', ascending=False)['Taux'].map(lambda x: f"{x:.1%}"))
-        fig.update_traces(textposition='outside', textfont=dict(color=C_DARK))
-        st.plotly_chart(theme(fig, 350), width="stretch")
-    with col2:
-        cross = df.groupby(['machine_type','operating_mode'])['failure_within_24h'].mean().unstack()
-        fig = px.imshow(cross, text_auto='.1%', color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_RED]],
-            title="Taux de panne : Machine x Mode opératoire")
-        st.plotly_chart(theme(fig, 350), width="stretch")
+        st.plotly_chart(theme(fig, 320), use_container_width=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 2 — ANALYSE DES DONNÉES
@@ -257,22 +372,22 @@ elif "Analyse" in page:
             color_discrete_map={0: C_GREEN2, 1: C_RED}, barmode='overlay', opacity=0.75,
             title=f"Distribution — {FEATURE_LABELS.get(feature, feature)}")
         fig.for_each_trace(lambda t: t.update(name='Sain' if t.name=='0' else 'Panne'))
-        st.plotly_chart(theme(fig), width="stretch")
+        st.plotly_chart(theme(fig), use_container_width=True)
     with col2:
         fig = px.box(df, x='failure_within_24h', y=feature, color='failure_within_24h',
             color_discrete_map={0: C_GREEN2, 1: C_RED}, title="Boxplot — OK vs Panne")
         fig.for_each_trace(lambda t: t.update(name='Sain' if t.name=='0' else 'Panne'))
-        st.plotly_chart(theme(fig), width="stretch")
+        st.plotly_chart(theme(fig), use_container_width=True)
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
         corr = df[NUMERIC_FEATURES + ['failure_within_24h']].corr()
         fig = px.imshow(corr, text_auto='.2f', color_continuous_scale=[[0,C_BLUE],[0.5,'#FFFFFF'],[1,C_GREEN]],
             title="Matrice de corrélation des capteurs")
-        st.plotly_chart(theme(fig, 450), width="stretch")
+        st.plotly_chart(theme(fig, 450), use_container_width=True)
     with col2:
         st.markdown("<h3>Statistiques descriptives</h3>", unsafe_allow_html=True)
-        st.dataframe(df[NUMERIC_FEATURES].describe().round(3), width="stretch", height=420)
+        st.dataframe(df[NUMERIC_FEATURES].describe().round(3), use_container_width=True, height=420)
     st.markdown("---")
     c1, c2, c3 = st.columns(3)
     c1.markdown(f"<div class='info-card'>Ratio déséquilibre : <b>5.8:1</b><br>85.2% sain / 14.8% panne</div>", unsafe_allow_html=True)
@@ -284,11 +399,11 @@ elif "Analyse" in page:
 # ═══════════════════════════════════════════════════════════════════════════════
 elif "Prédiction temps" in page:
     api_badge = '<span class="api-badge">Via API</span>' if api_ok else f'<span style="font-size:11px;color:#E67E22;">⚠ Mode local</span>'
-    st.markdown(f"""<div class='page-header'><h1>Prédiction de Panne en Temps Réel {api_badge}</h1><p>Saisissez les valeurs des capteurs pour évaluer le risque de panne dans les 24h</p></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class='page-header'><h1>Prédiction de Panne en Temps Réel {api_badge}</h1><p>Saisissez les valeurs des capteurs pour évaluer le risque de panne dans les 24h — Modèle XGBoost</p></div>""", unsafe_allow_html=True)
     if api_ok:
         st.markdown(f"""<div style='background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:10px 16px; font-size:13px; color:{C_BLUE}; margin-bottom:16px;'>🔗 Prédictions transmises à l'API FastAPI — <code>{api_url}/predict</code></div>""", unsafe_allow_html=True)
     else:
-        st.markdown(f"""<div style='background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:10px 16px; font-size:13px; color:{C_ORANGE}; margin-bottom:16px;'>⚠️ API non disponible — prédiction locale. Lancez <code>uvicorn api.main:app --reload --port 8000</code></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style='background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:10px 16px; font-size:13px; color:{C_ORANGE}; margin-bottom:16px;'>⚠️ API non disponible — prédiction locale via XGBoost. Lancez <code>uvicorn api.main:app --reload --port 8000</code></div>""", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"<div class='section-label'>Identification machine</div>", unsafe_allow_html=True)
@@ -313,22 +428,22 @@ elif "Prédiction temps" in page:
             "rpm": float(rpm), "hours_since_maintenance": float(hours_maintenance), "ambient_temp": float(ambient)}
         if api_ok:
             proba, risk_level, recommendation, success = predict_via_api(api_url, payload)
-            source_label = "🔗 Résultat via API FastAPI"
+            source_label = "🔗 Résultat via API FastAPI (XGBoost)"
             if not success:
                 input_data = pd.DataFrame([payload])
                 proba, risk_level, recommendation = predict_local(preprocessor, model, input_data)
-                source_label = "⚠️ Résultat local (erreur API)"
+                source_label = "⚠️ Résultat local XGBoost (erreur API)"
         else:
             input_data = pd.DataFrame([payload])
             proba, risk_level, recommendation = predict_local(preprocessor, model, input_data)
-            source_label = "💾 Résultat local (API indisponible)"
+            source_label = "💾 Résultat local XGBoost (API indisponible)"
         prediction = 1 if proba >= 0.70 else 0
         st.markdown(f"<div style='font-size:12px; color:{C_GREY}; margin-bottom:12px;'>{source_label}</div>", unsafe_allow_html=True)
         col1, col2 = st.columns([1, 1])
         with col1:
             color = C_RED if prediction == 1 else C_GREEN
             bg    = "#FEF2F2" if prediction == 1 else "#F0FDF4"
-            label = "Risque de panne détecté" if prediction == 1 else "Machine en bon état"
+            label = "⚠️ Risque de panne détecté" if prediction == 1 else "✅ Machine en bon état"
             rec_bg = "#FEF3C7" if prediction == 1 else "#DCFCE7"
             st.markdown(f"""<div style='background:{bg}; border:1px solid; border-left:4px solid {color}; border-radius:10px; padding:28px; text-align:center;'>
               <div style='font-size:13px; font-weight:700; color:{color}; text-transform:uppercase; letter-spacing:2px; margin-bottom:12px;'>{label}</div>
@@ -349,7 +464,7 @@ elif "Prédiction temps" in page:
                            dict(range=[70,100], color='rgba(231,76,60,0.10)')],
                     threshold=dict(line=dict(color=C_ORANGE, width=3), value=70))))
             fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color=C_DARK), height=280, margin=dict(l=20,r=20,t=40,b=20))
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         if api_ok:
             with st.expander("🔍 Détail de la requête API"):
                 col_req, col_resp = st.columns(2)
@@ -360,7 +475,7 @@ elif "Prédiction temps" in page:
                     st.json({"prediction": prediction, "probability": round(proba, 4), "risk_level": risk_level, "recommendation": recommendation})
         st.markdown("---")
         st.markdown("<h3>Paramètres saisis</h3>", unsafe_allow_html=True)
-        st.dataframe(pd.DataFrame([payload]).rename(columns=FEATURE_LABELS), width="stretch")
+        st.dataframe(pd.DataFrame([payload]).rename(columns=FEATURE_LABELS), use_container_width=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 4 — DURÉE DE VIE RESTANTE (RUL) — TÂCHE BONUS
@@ -392,33 +507,30 @@ elif "RUL" in page:
                 color_continuous_scale=[[0,C_GREEN],[0.5,C_ORANGE],[1,C_RED]],
                 text=df_rul.sort_values('MAE (h)', ascending=True)['MAE (h)'].map(lambda x: f"{x:.2f}h"))
             fig.update_traces(textposition='outside', textfont=dict(color=C_DARK))
-            st.plotly_chart(theme(fig, 320), width="stretch")
+            st.plotly_chart(theme(fig, 320), use_container_width=True)
         with col2:
             fig = px.bar(df_rul.sort_values('R²', ascending=True), x='R²', y='Modèle', orientation='h',
                 title="R² par modèle — plus haut = mieux", color='R²',
                 color_continuous_scale=[[0,C_RED],[0.5,C_ORANGE],[1,C_GREEN]],
                 text=df_rul.sort_values('R²', ascending=True)['R²'].map(lambda x: f"{x:.2f}"))
             fig.update_traces(textposition='outside', textfont=dict(color=C_DARK))
-            st.plotly_chart(theme(fig, 320), width="stretch")
+            st.plotly_chart(theme(fig, 320), use_container_width=True)
         st.dataframe(df_rul.style
             .highlight_min(axis=0, subset=['MAE (h)','RMSE (h)','MAE CV (h)'], color='rgba(27,138,62,0.15)')
             .highlight_max(axis=0, subset=['R²'], color='rgba(27,138,62,0.15)')
-            .format({'MAE (h)':'{:.2f}','RMSE (h)':'{:.2f}','R²':'{:.2f}','MAE CV (h)':'{:.2f}'}), width="stretch")
+            .format({'MAE (h)':'{:.2f}','RMSE (h)':'{:.2f}','R²':'{:.2f}','MAE CV (h)':'{:.2f}'}), use_container_width=True)
         st.markdown("---")
         st.markdown("<h3>Simulateur — Estimer la durée de vie restante</h3>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.markdown(f"<div class='section-label'>Identification machine</div>", unsafe_allow_html=True)
             rul_machine = st.selectbox("Type de machine", ['CNC','Pump','Compressor','Robotic Arm'], key='rul_machine')
             rul_mode    = st.selectbox("Mode opératoire", ['normal','idle','peak'], key='rul_mode')
             rul_vib     = st.number_input("Vibration RMS (mm/s)", min_value=0.35, max_value=10.0, value=2.0, step=0.05, key='rul_vib')
         with col2:
-            st.markdown(f"<div class='section-label'>Capteurs</div>", unsafe_allow_html=True)
             rul_temp     = st.number_input("Température moteur (°C)", min_value=28.0, max_value=95.0, value=55.0, step=0.5, key='rul_temp')
             rul_current  = st.number_input("Courant phase moyen (A)", min_value=2.2, max_value=35.0, value=9.0, step=0.1, key='rul_current')
             rul_pressure = st.number_input("Pression (bar)", min_value=10.0, max_value=206.0, value=60.0, step=1.0, key='rul_pressure')
         with col3:
-            st.markdown(f"<div class='section-label'>Dynamique</div>", unsafe_allow_html=True)
             rul_rpm   = st.number_input("RPM", min_value=124.0, max_value=4098.0, value=1200.0, step=1.0, key='rul_rpm')
             rul_hours = st.number_input("Heures depuis maintenance", min_value=0.0, max_value=575.0, value=150.0, step=1.0, key='rul_hours')
             rul_amb   = st.number_input("Température ambiante (°C)", min_value=8.0, max_value=18.0, value=13.0, step=0.5, key='rul_amb')
@@ -453,7 +565,7 @@ elif "RUL" in page:
                                dict(range=[24,98], color='rgba(39,174,96,0.10)')],
                         threshold=dict(line=dict(color=C_ORANGE, width=3), value=24))))
                 fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color=C_DARK), height=280, margin=dict(l=20,r=20,t=40,b=20))
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
         st.markdown("---")
         st.markdown(f"""<div class='info-card'><b>Interprétation métier :</b> Le modèle Random Forest estime la durée de vie restante avec une erreur moyenne de <b>±9.42 heures</b>. Un responsable maintenance peut planifier ses interventions avec une fenêtre de confiance de ±9h.<br><br><b>Seuils :</b> &lt;10h = intervention urgente · 10–24h = planifier maintenance · &gt;24h = opérationnel</div>""", unsafe_allow_html=True)
 
@@ -496,7 +608,7 @@ elif "parc" in page:
             lambda row: ['background-color: #FEF2F2' if 'CRITIQUE' in str(row.get('Statut',''))
                          else ('background-color: #FFFBEB' if 'ATTENTION' in str(row.get('Statut',''))
                          else 'background-color: #F0FDF4')] * len(row), axis=1),
-            width="stretch", height=480)
+            use_container_width=True, height=480)
     with col2:
         statut_counts = df_parc['Statut'].apply(
             lambda x: 'Critique' if 'CRITIQUE' in x else ('Attention' if 'ATTENTION' in x else 'OK')
@@ -506,13 +618,13 @@ elif "parc" in page:
         fig.update_layout(title=dict(text="Répartition des statuts", font=dict(color=C_DARK)),
             paper_bgcolor='rgba(0,0,0,0)', legend=dict(font=dict(color=C_DARK), bgcolor='rgba(255,255,255,0.9)'),
             height=280, margin=dict(l=20,r=20,t=40,b=20))
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
         fig2 = px.scatter(df_parc, x='RUL estimé (h)', y='Prob. panne (%)', color='Type',
             hover_data=['ID','Type','Mode'], title="Risque vs Durée de vie restante",
             color_discrete_sequence=[C_BLUE, C_GREEN, C_ORANGE, C_RED])
         fig2.add_hline(y=70, line_dash="dash", line_color=C_RED, annotation_text="Seuil 70%")
         fig2.add_vline(x=24, line_dash="dash", line_color=C_ORANGE, annotation_text="24h")
-        st.plotly_chart(theme(fig2, 280), width="stretch")
+        st.plotly_chart(theme(fig2, 280), use_container_width=True)
     st.markdown("---")
     st.markdown(f"""<div class='info-card'><b>Plan d'intervention recommandé :</b><br>🔴 <b>{n_critique} machine(s) critique(s)</b> — intervention dans les 24h<br>🟠 <b>{n_attention} machine(s) en attention</b> — planifier inspection sous 48-72h<br>🟢 <b>{n_ok} machine(s) opérationnelle(s)</b> — maintenance préventive selon planning</div>""", unsafe_allow_html=True)
 
@@ -561,7 +673,7 @@ elif "économique" in page:
         fig.update_layout(title="Comparaison des coûts annuels totaux", showlegend=False,
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(240,248,240,0.4)', font=dict(color=C_DARK),
             height=380, margin=dict(l=40,r=20,t=50,b=40))
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
     with col2:
         fig = go.Figure(go.Pie(
             values=[cout_pannes_manquees, cout_fausses_alarmes_total, cout_interventions_ia],
@@ -570,9 +682,8 @@ elif "économique" in page:
         fig.update_layout(title="Décomposition du coût avec IA", paper_bgcolor='rgba(0,0,0,0)',
             legend=dict(font=dict(color=C_DARK), bgcolor='rgba(255,255,255,0.9)'),
             height=380, margin=dict(l=20,r=20,t=50,b=20))
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
     st.markdown("---")
-    st.markdown("<h3>Projection sur 3 ans</h3>", unsafe_allow_html=True)
     annees = ['Année 1', 'Année 2', 'Année 3']
     economies_3ans = [economies, economies*1.08, economies*1.15]
     cout_ia_3ans   = [cout_avec_ia, cout_avec_ia*0.95, cout_avec_ia*0.92]
@@ -589,15 +700,15 @@ elif "économique" in page:
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(240,248,240,0.4)', font=dict(color=C_DARK),
         legend=dict(bgcolor='rgba(255,255,255,0.9)', font=dict(color=C_DARK)),
         height=350, margin=dict(l=40,r=20,t=50,b=40))
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
     total_3ans = sum(economies_3ans)
-    st.markdown(f"""<div class='info-card'><b>Synthèse ROI sur 3 ans :</b><br>Économies cumulées estimées : <b>{total_3ans:,.0f} €</b> sur {n_machines} machines<br>Réduction de <b>{roi_pct:.0f}%</b> des coûts de maintenance annuels.<br><br><b>Hypothèses :</b> Coût panne = {cout_panne:,}€ · Coût fausse alarme = {cout_fausse:,}€ · Coût intervention planifiée = {COUT_INTERVENTION_IA:,}€ · Recall = {recall_modele}% · Précision = {precision_mod}%</div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class='info-card'><b>Synthèse ROI sur 3 ans :</b><br>Économies cumulées estimées : <b>{total_3ans:,.0f} €</b> sur {n_machines} machines<br>Réduction de <b>{roi_pct:.0f}%</b> des coûts de maintenance annuels.</div>""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 7 — PERFORMANCE DES MODÈLES
 # ═══════════════════════════════════════════════════════════════════════════════
 elif "Performance" in page:
-    st.markdown(f"""<div class='page-header'><h1>Comparaison des Modèles ML et DL</h1><p>Évaluation sur le jeu de test — 4 809 observations (20%)</p></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class='page-header'><h1>Comparaison des Modèles ML et DL</h1><p>Évaluation sur le jeu de test — 4 809 observations (20%) · Modèle retenu en production : XGBoost</p></div>""", unsafe_allow_html=True)
     results = {
         'XGBoost':             {'Accuracy':0.9744,'Precision':0.8820,'Recall':0.9551,'F1':0.9171,'ROC-AUC':0.9955,'PR-AUC':0.9741},
         'Random Forest':       {'Accuracy':0.9682,'Precision':0.9010,'Recall':0.8820,'F1':0.8914,'ROC-AUC':0.9938,'PR-AUC':0.9645},
@@ -620,7 +731,7 @@ elif "Performance" in page:
         paper_bgcolor='rgba(0,0,0,0)', font=dict(color=C_DARK),
         title=dict(text="Radar — Comparaison globale des 4 modèles", font=dict(color=C_DARK)),
         legend=dict(bgcolor='rgba(255,255,255,0.9)', font=dict(color=C_DARK), bordercolor=C_BORDER, borderwidth=1), height=420)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
@@ -630,26 +741,29 @@ elif "Performance" in page:
             color_continuous_scale=[[0,C_GREEN3],[0.7,C_GREEN2],[1,C_GREEN]],
             text=df_res.sort_values(metric, ascending=True)[metric].map(lambda x: f"{x:.4f}"))
         fig.update_traces(textposition='outside', textfont=dict(color=C_DARK))
-        st.plotly_chart(theme(fig, 320), width="stretch")
+        st.plotly_chart(theme(fig, 320), use_container_width=True)
     with col2:
-        st.dataframe(df_res.style.highlight_max(axis=0, subset=cats, color='rgba(27,138,62,0.15)').format({c:'{:.4f}' for c in cats}), width="stretch", height=220)
-        st.markdown(f"""<div class='info-card' style='margin-top:12px;'><b>Modèle retenu : XGBoost</b><br>Meilleur ROC-AUC (0.9955), PR-AUC (0.9741), Recall (0.9551) et F1 (0.9171).<br>Stable en validation croisée (std Recall = ±0.014).<br>Seuil de décision optimisé à <b>0.70</b>.</div>""", unsafe_allow_html=True)
+        st.dataframe(df_res.style.highlight_max(axis=0, subset=cats, color='rgba(27,138,62,0.15)').format({c:'{:.4f}' for c in cats}), use_container_width=True, height=220)
+        st.markdown(f"""<div class='info-card' style='margin-top:12px;'><b>✅ Modèle retenu en production : XGBoost</b><br>
+        Meilleur ROC-AUC (0.9955), PR-AUC (0.9741), Recall (0.9551) et F1 (0.9171).<br>
+        Stable en validation croisée (std Recall = ±0.014).<br>
+        60× moins de CO₂ que le MLP · Inférence &lt;1ms.<br>
+        Seuil de décision optimisé à <b>0.70</b> pour maximiser le F1.</div>""", unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("<h3>Validation croisée — Stratified K-Fold (5 folds)</h3>", unsafe_allow_html=True)
     cv = pd.DataFrame({'Modèle':['XGBoost','Random Forest','Logistic Regression'],
         'Recall moyen':[0.9466,0.8683,0.8838], 'Recall std':['±0.0135','±0.0113','±0.0128'],
         'F1 moyen':[0.9127,0.8932,0.7454], 'ROC-AUC moyen':[0.9949,0.9930,0.9562]})
-    st.dataframe(cv, width="stretch")
+    st.dataframe(cv, use_container_width=True)
     st.markdown("---")
     st.markdown("<h3>Techniques de gestion du déséquilibre</h3>", unsafe_allow_html=True)
     imb = pd.DataFrame({'Technique':['class_weight (retenu)','Random Over-Sampling','SMOTE','Random Under-Sampling'],
         'Recall':[0.9551,0.9494,0.9438,0.9719], 'F1':[0.9171,0.9111,0.8924,0.8491],
         'ROC-AUC':[0.9955,0.9960,0.9949,0.9910], 'PR-AUC':[0.9741,0.9742,0.9794,0.9500]})
     fig = px.bar(imb, x='Technique', y=['Recall','F1','ROC-AUC','PR-AUC'], barmode='group',
-        title="Comparaison des techniques de rééquilibrage (avec PR-AUC)",
+        title="Comparaison des techniques de rééquilibrage",
         color_discrete_map={'Recall':C_RED,'F1':C_GREEN,'ROC-AUC':C_BLUE,'PR-AUC':C_ORANGE})
-    st.plotly_chart(theme(fig, 380), width="stretch")
-    st.markdown(f"<div class='info-card'>PR-AUC (Precision-Recall AUC) est particulièrement adapté aux classes déséquilibrées. Un modèle aléatoire obtiendrait PR-AUC = 0.148. XGBoost atteint <b>0.9741</b>, soit +82 points au-dessus du hasard.</div>", unsafe_allow_html=True)
+    st.plotly_chart(theme(fig, 380), use_container_width=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 8 — INTERPRÉTABILITÉ SHAP
@@ -662,7 +776,7 @@ elif "SHAP" in page:
         title="Feature Importance — XGBoost (réduction d'impureté Gini)", color='Importance',
         color_continuous_scale=[[0,C_GREEN3],[0.5,C_GREEN2],[1,C_GREEN]])
     fig.update_traces(texttemplate='%{x:.3f}', textposition='outside', textfont=dict(color=C_DARK, size=11))
-    st.plotly_chart(theme(fig, 500), width="stretch")
+    st.plotly_chart(theme(fig, 500), use_container_width=True)
     st.markdown("---")
     shap_s = os.path.join(BASE_DIR, 'reports', 'shap_summary.png')
     shap_a = os.path.join(BASE_DIR, 'reports', 'shap_analysis.png')
@@ -671,11 +785,11 @@ elif "SHAP" in page:
         if os.path.exists(shap_s):
             with col1:
                 st.markdown("<h3>SHAP Summary Plot</h3>", unsafe_allow_html=True)
-                st.image(shap_s, width="stretch")
+                st.image(shap_s, use_container_width=True)
         if os.path.exists(shap_a):
             with col2:
                 st.markdown("<h3>SHAP — Analyse détaillée</h3>", unsafe_allow_html=True)
-                st.image(shap_a, width="stretch")
+                st.image(shap_a, use_container_width=True)
     st.markdown("---")
     st.markdown("<h3>Interprétation métier des variables clés</h3>", unsafe_allow_html=True)
     variables = [
