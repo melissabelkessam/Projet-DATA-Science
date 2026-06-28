@@ -140,23 +140,42 @@ def check_api_health(api_url):
     except Exception:
         return False, {}
 
-@st.cache_data
-def generate_parc_machines():
+def generate_parc_machines(preprocessor, model, rul_model, rul_preprocessor):
     np.random.seed(42)
     machine_types = ['CNC', 'Pump', 'Compressor', 'Robotic Arm']
     modes = ['normal', 'idle', 'peak']
     machines = []
     for i in range(1, 16):
-        mt = machine_types[i % 4]
+        mt   = machine_types[i % 4]
         mode = modes[i % 3]
-        vib  = np.random.uniform(0.5, 9.5)
-        temp = np.random.uniform(35, 90)
-        prob = np.clip((vib/10)*0.4 + (temp-35)/55*0.6 + np.random.normal(0, 0.05), 0, 1)
-        rul  = max(0, np.random.uniform(0, 98) * (1 - prob))
+        vib  = round(np.random.uniform(0.5, 9.5), 2)
+        temp = round(np.random.uniform(35, 90), 1)
+        curr = round(np.random.uniform(2.2, 30.0), 1)
+        pres = round(np.random.uniform(10.0, 200.0), 1)
+        rpm  = round(np.random.uniform(124.0, 4000.0), 0)
+        hrs  = round(np.random.uniform(0.0, 575.0), 0)
+        amb  = round(np.random.uniform(8.0, 18.0), 1)
+
+        input_df = pd.DataFrame([{
+            'vibration_rms': vib, 'temperature_motor': temp,
+            'current_phase_avg': curr, 'pressure_level': pres,
+            'rpm': rpm, 'hours_since_maintenance': hrs,
+            'ambient_temp': amb, 'machine_type': mt, 'operating_mode': mode
+        }])
+
+        # Prédiction panne avec le VRAI modèle XGBoost
+        prob = float(model.predict_proba(preprocessor.transform(input_df))[0][1])
+
+        # Prédiction RUL avec le VRAI modèle Random Forest
+        # Le modèle RUL est un Pipeline complet (preprocessor + regressor)
+        # Il prend les données BRUTES directement
+        rul_val = max(0.0, float(rul_model.predict(input_df)[0])) if rul_model is not None else max(0, np.random.uniform(0, 98) * (1 - prob))
+
         machines.append({
             'ID': f'M{i:03d}', 'Type': mt, 'Mode': mode,
-            'Vibration (mm/s)': round(vib, 2), 'Temp. moteur (°C)': round(temp, 1),
-            'Prob. panne (%)': round(prob*100, 1), 'RUL estimé (h)': round(rul, 1),
+            'Vibration (mm/s)': vib, 'Temp. moteur (°C)': temp,
+            'Prob. panne (%)': round(prob * 100, 1),
+            'RUL estimé (h)': round(rul_val, 1),
             'Statut': '🔴 CRITIQUE' if prob >= 0.70 else ('🟠 ATTENTION' if prob >= 0.30 else '🟢 OK'),
         })
     return pd.DataFrame(machines).sort_values('Prob. panne (%)', ascending=False)
@@ -217,7 +236,7 @@ if "Vue d'ensemble" in page:
     n_pannes    = int(df['failure_within_24h'].sum())
     n_saines    = len(df) - n_pannes
     taux        = df['failure_within_24h'].mean()
-    df_parc     = generate_parc_machines()
+    df_parc     = generate_parc_machines(preprocessor, model, rul_model, rul_preprocessor)
     n_critique  = len(df_parc[df_parc['Statut'].str.contains('CRITIQUE')])
     n_attention = len(df_parc[df_parc['Statut'].str.contains('ATTENTION')])
     n_ok        = len(df_parc[df_parc['Statut'].str.contains('OK')])
@@ -540,32 +559,17 @@ elif "RUL" in page:
             rul_hours = st.number_input("Heures depuis maintenance", min_value=0.0, max_value=575.0, value=150.0, step=1.0, key='rul_hours')
             rul_amb   = st.number_input("Température ambiante (°C)", min_value=8.0, max_value=18.0, value=13.0, step=0.5, key='rul_amb')
         if st.button("Estimer la durée de vie restante", type="primary", key='btn_rul'):
-            rul_payload = {
-                'machine_type': rul_machine, 'operating_mode': rul_mode,
+            rul_input = pd.DataFrame([{
                 'vibration_rms': float(rul_vib), 'temperature_motor': float(rul_temp),
                 'current_phase_avg': float(rul_current), 'pressure_level': float(rul_pressure),
                 'rpm': float(rul_rpm), 'hours_since_maintenance': float(rul_hours),
-                'ambient_temp': float(rul_amb)
-            }
-            # Appel API /predict-rul
-            rul_pred = None
-            source_rul = ""
-            if api_ok:
-                try:
-                    resp = requests.post(f"{api_url}/predict-rul", json=rul_payload, timeout=5)
-                    if resp.status_code == 200:
-                        rul_pred = resp.json()["rul_hours"]
-                        source_rul = "🔗 Résultat via API FastAPI (Random Forest RUL)"
-                except Exception:
-                    pass
-            # Fallback local si API indisponible
-            if rul_pred is None:
-                rul_input = pd.DataFrame([rul_payload])
-                active_rul_preprocessor = rul_preprocessor if rul_preprocessor is not None else preprocessor
-                rul_input_processed = active_rul_preprocessor.transform(rul_input)
-                rul_pred = max(0, float(rul_model.predict(rul_input_processed)[0]))
-                source_rul = "💾 Résultat local Random Forest RUL (API indisponible)"
-            st.markdown(f"<div style='font-size:12px; color:{C_GREY}; margin-bottom:12px;'>{source_rul}</div>", unsafe_allow_html=True)
+                'ambient_temp': float(rul_amb), 'machine_type': rul_machine, 'operating_mode': rul_mode
+            }])
+            # Utilise le preprocessor RUL dédié, ou fallback sur le preprocessor classification
+            active_rul_preprocessor = rul_preprocessor if rul_preprocessor is not None else preprocessor
+            rul_input_processed = active_rul_preprocessor.transform(rul_input)
+            # Le modèle RUL est un Pipeline complet → prend les données brutes
+            rul_pred = max(0, float(rul_model.predict(rul_input)[0]))
             urgency_color = C_RED if rul_pred < 10 else (C_ORANGE if rul_pred < 24 else C_GREEN)
             urgency_label = "INTERVENTION URGENTE" if rul_pred < 10 else ("PLANIFIER MAINTENANCE" if rul_pred < 24 else "MACHINE OPÉRATIONNELLE")
             urgency_bg    = "#FEF2F2" if rul_pred < 10 else ("#FFFBEB" if rul_pred < 24 else "#F0FDF4")
@@ -598,7 +602,7 @@ elif "RUL" in page:
 # ═══════════════════════════════════════════════════════════════════════════════
 elif "parc" in page:
     st.markdown(f"""<div class='page-header'><h1>État du Parc Machines <span class='badge'>Temps réel</span></h1><p>Vue d'ensemble des 15 machines — Statut, risque de panne et durée de vie restante</p></div>""", unsafe_allow_html=True)
-    df_parc = generate_parc_machines()
+    df_parc = generate_parc_machines(preprocessor, model, rul_model, rul_preprocessor)
     n_critique  = len(df_parc[df_parc['Statut'].str.contains('CRITIQUE')])
     n_attention = len(df_parc[df_parc['Statut'].str.contains('ATTENTION')])
     n_ok        = len(df_parc[df_parc['Statut'].str.contains('OK')])
