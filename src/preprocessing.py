@@ -2,6 +2,24 @@
 preprocessing.py — Pipeline de préparation des données
 Maintenance Prédictive Industrielle · EFREI 2025-26
 Amelia BOUKRI & Mélissa BELKESSAM
+
+
+C'est quoi preprocessing.py ?
+C'est le même code que le notebook 02 mais réécrit proprement en fonctions réutilisables
+
+Notebook 02 :
+→ Code linéaire, cellule par cellule
+→ Avec des graphiques, des print, des explications
+→ On l'exécute une fois pour développer
+
+preprocessing.py :
+→ Code organisé en fonctions
+→ Importé par l'API et le dashboard
+→ Réutilisable et maintenable
+
+preprocessing.py est la version industrialisée du notebook 02.
+Le même pipeline sklearn est encapsulé dans des fonctions réutilisables. 
+L'API et le dashboard importent ce module pour transformer les nouvelles données avant de les passer au modèle
 """
 
 import numpy as np

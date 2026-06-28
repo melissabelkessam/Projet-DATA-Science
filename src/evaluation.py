@@ -2,6 +2,10 @@
 evaluation.py — Métriques, comparaison des modèles, seuil de décision
 Maintenance Prédictive Industrielle · EFREI 2025-26
 Amelia BOUKRI & Mélissa BELKESSAM
+
+evaluation.py encapsule toutes les fonctions d'évaluation. 
+La différence clé avec le notebook 03 c'est que le seuil de décision optimisé à 0.70 est appliqué automatiquement 
+via config.py. On peut évaluer tous les modèles en une seule ligne avec compare_models()
 """
 
 import numpy as np

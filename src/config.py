@@ -3,6 +3,29 @@ config.py — Paramètres centralisés du projet
 Maintenance Prédictive Industrielle · EFREI 2025-26
 Amelia BOUKRI & Mélissa BELKESSAM
 """
+"""
+config.py centralise tous les paramètres du projet — chemins, 
+features, seuil de décision, hyperparamètres. 
+Si on veut changer un paramètre, on le modifie une seule fois ici et ça se propage automatiquement partout.
+ C'est une bonne pratique d'ingénierie logicielle.
+
+
+L'ordre de travail
+DÉVELOPPEMENT (notebooks) :
+→ On teste, on découvre, on trouve le meilleur seuil = 0.70
+→ Les notebooks gardent les valeurs en dur
+
+PRODUCTION (modules src) :
+→ On écrit les vraies valeurs dans config.py
+→ Les modules importent config.py
+
+Notebook = cahier de brouillon de nous les data scinetist 
+→ plein de ratures, de tests, de valeurs essayées
+
+config.py = rapport final propre
+→ contient les valeurs définitives validées
+→ utilisé par l'équipe en production
+"""
 
 import os
 from pathlib import Path

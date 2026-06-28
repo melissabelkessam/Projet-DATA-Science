@@ -2,6 +2,13 @@
 interpretability.py — Feature Importance et analyse SHAP
 Maintenance Prédictive Industrielle · EFREI 2025-26
 Amelia BOUKRI & Mélissa BELKESSAM
+
+C'est le même code que le notebook 04 mais organisé en fonctions propres.
+
+"interpretability.py encapsule les fonctions SHAP du notebook 04. 
+La fonction explain_single_prediction est particulièrement importante 
+elle explique en temps réel pourquoi le modèle prédit une panne pour une machine spécifique.
+ C'est ce qui permet au responsable maintenance de comprendre et faire confiance aux alertes.
 """
 
 import numpy as np

@@ -2,6 +2,11 @@
 models.py — Entraînement et sérialisation des modèles ML / DL
 Maintenance Prédictive Industrielle · EFREI 2025-26
 Amelia BOUKRI & Mélissa BELKESSAM
+
+C'est le même code que le notebook 03 mais organisé en fonctions propres.
+models.py encapsule l'entraînement des 4 modèles en fonctions réutilisables.
+ Tous les hyperparamètres viennent de config.py. 
+ En production, on peut réentraîner tous les modèles avec une seule commande  python models.py
 """
 
 import numpy as np

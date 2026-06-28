@@ -540,16 +540,32 @@ elif "RUL" in page:
             rul_hours = st.number_input("Heures depuis maintenance", min_value=0.0, max_value=575.0, value=150.0, step=1.0, key='rul_hours')
             rul_amb   = st.number_input("Température ambiante (°C)", min_value=8.0, max_value=18.0, value=13.0, step=0.5, key='rul_amb')
         if st.button("Estimer la durée de vie restante", type="primary", key='btn_rul'):
-            rul_input = pd.DataFrame([{
+            rul_payload = {
+                'machine_type': rul_machine, 'operating_mode': rul_mode,
                 'vibration_rms': float(rul_vib), 'temperature_motor': float(rul_temp),
                 'current_phase_avg': float(rul_current), 'pressure_level': float(rul_pressure),
                 'rpm': float(rul_rpm), 'hours_since_maintenance': float(rul_hours),
-                'ambient_temp': float(rul_amb), 'machine_type': rul_machine, 'operating_mode': rul_mode
-            }])
-            # Utilise le preprocessor RUL dédié, ou fallback sur le preprocessor classification
-            active_rul_preprocessor = rul_preprocessor if rul_preprocessor is not None else preprocessor
-            rul_input_processed = active_rul_preprocessor.transform(rul_input)
-            rul_pred = max(0, float(rul_model.predict(rul_input_processed)[0]))
+                'ambient_temp': float(rul_amb)
+            }
+            # Appel API /predict-rul
+            rul_pred = None
+            source_rul = ""
+            if api_ok:
+                try:
+                    resp = requests.post(f"{api_url}/predict-rul", json=rul_payload, timeout=5)
+                    if resp.status_code == 200:
+                        rul_pred = resp.json()["rul_hours"]
+                        source_rul = "🔗 Résultat via API FastAPI (Random Forest RUL)"
+                except Exception:
+                    pass
+            # Fallback local si API indisponible
+            if rul_pred is None:
+                rul_input = pd.DataFrame([rul_payload])
+                active_rul_preprocessor = rul_preprocessor if rul_preprocessor is not None else preprocessor
+                rul_input_processed = active_rul_preprocessor.transform(rul_input)
+                rul_pred = max(0, float(rul_model.predict(rul_input_processed)[0]))
+                source_rul = "💾 Résultat local Random Forest RUL (API indisponible)"
+            st.markdown(f"<div style='font-size:12px; color:{C_GREY}; margin-bottom:12px;'>{source_rul}</div>", unsafe_allow_html=True)
             urgency_color = C_RED if rul_pred < 10 else (C_ORANGE if rul_pred < 24 else C_GREEN)
             urgency_label = "INTERVENTION URGENTE" if rul_pred < 10 else ("PLANIFIER MAINTENANCE" if rul_pred < 24 else "MACHINE OPÉRATIONNELLE")
             urgency_bg    = "#FEF2F2" if rul_pred < 10 else ("#FFFBEB" if rul_pred < 24 else "#F0FDF4")

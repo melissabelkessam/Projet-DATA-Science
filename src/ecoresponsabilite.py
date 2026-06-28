@@ -4,6 +4,13 @@ Maintenance Prédictive Industrielle · EFREI 2025-26
 Amelia BOUKRI & Mélissa BELKESSAM
 
 Compétence RNCP C4.3 : évaluer le degré d'écoresponsabilité des modèles.
+C'est le fichier qui mesure l'impact environnemental de chaque modèle.
+C'est une exigence du titre RNCP C4.3  évaluer le degré d'écoresponsabilité des modèles.
+
+ecoresponsabilite.py mesure deux choses : 
+le temps d'inférence et les émissions CO₂ via CodeCarbon. 
+XGBoost émet 60 fois moins de CO₂ que le MLP pendant l'entraînement et répond en moins d'1ms en production.
+L'écoresponsabilité est un critère de sélection à part entière qui confirme notre choix de XGBoost
 
 Usage :
     python src/ecoresponsabilite.py
