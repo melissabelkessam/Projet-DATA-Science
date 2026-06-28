@@ -69,17 +69,21 @@ def load_models():
 
 @st.cache_resource
 def load_rul_model():
-    rul_path = os.path.join(BASE_DIR, 'models', 'rul_model.joblib')
-    if os.path.exists(rul_path):
-        return joblib.load(rul_path)
-    return None
+    rul_path      = os.path.join(BASE_DIR, 'models', 'rul_model.joblib')
+    rul_prep_path = os.path.join(BASE_DIR, 'models', 'rul_preprocessor.joblib')
+    if os.path.exists(rul_path) and os.path.exists(rul_prep_path):
+        return joblib.load(rul_path), joblib.load(rul_prep_path)
+    elif os.path.exists(rul_path):
+        # Fallback : si rul_preprocessor absent, on utilise le preprocessor classification
+        return joblib.load(rul_path), None
+    return None, None
 
 @st.cache_data
 def load_data():
     return pd.read_csv(os.path.join(BASE_DIR, 'data', 'predictive_maintenance_v3.csv'))
 
 preprocessor, model = load_models()
-rul_model = load_rul_model()
+rul_model, rul_preprocessor = load_rul_model()
 df = load_data()
 
 FEATURE_NAMES = ['vibration_rms', 'temperature_motor', 'current_phase_avg',
@@ -164,6 +168,7 @@ with st.sidebar:
         st.image(logo_path, width=150)
 
     rul_status = "✅ Chargé" if rul_model is not None else "❌ Non trouvé"
+    rul_prep_status = "✅ Chargé" if rul_preprocessor is not None else "⚠️ Fallback classification"
     st.markdown(f"""
     <div style='padding:14px 0 20px 0; border-bottom:1px solid {C_BORDER}; margin-bottom:24px;'>
       <div style='font-size:17px; font-weight:800; color:{C_DARK};'>MaintPredict</div>
@@ -541,7 +546,10 @@ elif "RUL" in page:
                 'rpm': float(rul_rpm), 'hours_since_maintenance': float(rul_hours),
                 'ambient_temp': float(rul_amb), 'machine_type': rul_machine, 'operating_mode': rul_mode
             }])
-            rul_pred = max(0, float(rul_model.predict(rul_input)[0]))
+            # Utilise le preprocessor RUL dédié, ou fallback sur le preprocessor classification
+            active_rul_preprocessor = rul_preprocessor if rul_preprocessor is not None else preprocessor
+            rul_input_processed = active_rul_preprocessor.transform(rul_input)
+            rul_pred = max(0, float(rul_model.predict(rul_input_processed)[0]))
             urgency_color = C_RED if rul_pred < 10 else (C_ORANGE if rul_pred < 24 else C_GREEN)
             urgency_label = "INTERVENTION URGENTE" if rul_pred < 10 else ("PLANIFIER MAINTENANCE" if rul_pred < 24 else "MACHINE OPÉRATIONNELLE")
             urgency_bg    = "#FEF2F2" if rul_pred < 10 else ("#FFFBEB" if rul_pred < 24 else "#F0FDF4")
